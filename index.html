@@ -90,10 +90,15 @@
               clicked: false
           });
       }
-      // Päivitetään pallot Firestoreen
+
+      // Tallenna pallot Firestoreen
       const ballsRef = collection(db, 'balls');
       const ballRef = doc(ballsRef, 'game');
-      await setDoc(ballRef, balls);
+      await setDoc(ballRef, { balls: balls });
+      
+      // Debug: tarkista, että pallot tallennetaan oikein
+      console.log("Pallot luotu ja tallennettu Firestoreen:", balls);
+      
       drawBalls();
   }
 
@@ -177,17 +182,13 @@
       const ballsRef = collection(db, 'balls');
       const ballRef = doc(ballsRef, 'game');
       balls[index].clicked = true;
-      await updateDoc(ballRef, { [index]: balls[index] });
+      await updateDoc(ballRef, { [`balls.${index}`]: balls[index] });
 
       // Kuunnellaan pallon tilaa Firestoresta
       const ballSnapshot = await getDocs(ballsRef);
       ballSnapshot.forEach((doc) => {
           const ballData = doc.data();
-          balls.forEach((ball, i) => {
-              if (ballData[i]) {
-                  ball.clicked = true;
-              }
-          });
+          balls = ballData.balls;
           drawBalls();
       });
   }
