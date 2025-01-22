@@ -124,6 +124,8 @@
       const playersQuery = query(playersRef, where("ready", "==", true));
       const unsubscribe = onSnapshot(playersQuery, (snapshot) => {
           playersReady = snapshot.size;
+          console.log("Pelaajia valmiina:", playersReady);  // Lisää debug-viesti
+
           if (playersReady === 2 && !gameStarted) {
               gameStarted = true;
               document.getElementById('startButton').style.display = 'none';
