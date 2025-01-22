@@ -90,13 +90,12 @@
               clicked: false
           });
       }
-      // Piirretään pallot heti kun ne on luotu
       drawBalls();
   }
 
   // Piirretään pallot pelissä
   function drawBalls() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Tyhjennetään aiemmat piirrokset
       balls.forEach(ball => {
           if (!ball.clicked) {
               ctx.beginPath();
