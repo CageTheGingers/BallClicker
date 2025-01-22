@@ -81,7 +81,7 @@
   const statusElement = document.getElementById('status');
 
   // Alustetaan pelin pallot
-  function initBalls() {
+  async function initBalls() {
       balls = [];
       for (let i = 0; i < totalBalls; i++) {
           balls.push({
@@ -90,6 +90,10 @@
               clicked: false
           });
       }
+      // Päivitetään pallot Firestoreen
+      const ballsRef = collection(db, 'balls');
+      const ballRef = doc(ballsRef, 'game');
+      await setDoc(ballRef, balls);
       drawBalls();
   }
 
@@ -170,11 +174,13 @@
 
   // Päivitetään pallon tila Firestoreen
   async function updateBallStatus(index) {
-      const ballRef = doc(db, 'balls', 'game');
-      await updateDoc(ballRef, { [index]: true });
+      const ballsRef = collection(db, 'balls');
+      const ballRef = doc(ballsRef, 'game');
+      balls[index].clicked = true;
+      await updateDoc(ballRef, { [index]: balls[index] });
 
       // Kuunnellaan pallon tilaa Firestoresta
-      const ballSnapshot = await getDocs(collection(db, 'balls'));
+      const ballSnapshot = await getDocs(ballsRef);
       ballSnapshot.forEach((doc) => {
           const ballData = doc.data();
           balls.forEach((ball, i) => {
