@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pallopeli</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            background-color: #f0f0f0;
+        }
+        #startButton {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<button id="startButton">Valmis</button>
+<div id="status"></div>
+
+<!-- Ladataan Firebase SDK:t moduuleina -->
+<script type="module">
+  // Tuodaan Firebase SDK:n moduulit
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+  import { getFirestore, collection, doc, setDoc, updateDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+
+  // Firebase konfiguraatio
+  const firebaseConfig = {
+    apiKey: "AIzaSyBF9oJdOKX8R8F_jMS656ve2Bopa4Vzts0",
+    authDomain: "ballclicker-a42c2.firebaseapp.com",
+    projectId: "ballclicker-a42c2",
+    storageBucket: "ballclicker-a42c2.firebasestorage.app",
+    messagingSenderId: "398818397667",
+    appId: "1:398818397667:web:67cf0d2b026155611b24d6",
+    measurementId: "G-RBF3K0LL0P"
+  };
+
+  // Alustetaan Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // Pelin perusmuuttujat
+  let gameStarted = false;
+  let balls = [];
+  let playersReady = 0;
+  let playerId = Math.random().toString(36).substring(2, 7);  // Uniikki tunnus pelaajalle
+  let ballSize = 50;
+  let totalBalls = 10;
+  let gameData = { player1: 0, player2: 0 };
+
+  // Canvasin ja kontekstin asettaminen
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // Pelin status-elementti
+  const statusElement = document.getElementById('status');
+
+  // Alustetaan pelin pallot
+  function initBalls() {
+      balls = [];
+      for (let i = 0; i < totalBalls; i++) {
+          balls.push({
+              x: Math.random() * canvas.width,
+              y: Math.random() * canvas.height,
+              clicked: false
+          });
+      }
+      // Piirretään pallot heti kun ne on luotu
+      drawBalls();
+  }
+
+  // Piirretään pallot pelissä
+  function drawBalls() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      balls.forEach(ball => {
+          if (!ball.clicked) {
+              ctx.beginPath();
+              ctx.arc(ball.x, ball.y, ballSize, 0, 2 * Math.PI);
+              ctx.fillStyle = 'blue';
+              ctx.fill();
+              ctx.stroke();
+          }
+      });
+  }
+
+  // Skalaus toiminto ikkunan koon mukaan
+  window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      ballSize = Math.min(window.innerWidth, window.innerHeight) / 20;  // Skaalaa pallon kokoa
+      drawBalls();
+  });
+
+  // Pelaajien tila Firestoreen
+  async function updatePlayerStatus() {
+      const playersRef = collection(db, 'players');
+      await setDoc(doc(playersRef, playerId), { ready: true });
+
+      // Odotetaan molempien pelaajien valmiustilaa
+      const playersQuery = query(playersRef, where("ready", "==", true));
+      const unsubscribe = onSnapshot(playersQuery, (snapshot) => {
+          playersReady = snapshot.size;
+          if (playersReady === 2 && !gameStarted) {
+              gameStarted = true;
+              document.getElementById('startButton').style.display = 'none';
+              statusElement.innerText = 'Peli alkaa!';
+              initBalls();  // Pallot luodaan ja piirretään
+              updateGameStatus('started');
+          } else if (playersReady < 2) {
+              statusElement.innerText = 'Odota toista pelaajaa...';
+          }
+      });
+  }
+
+  // Peli alkaa, kun molemmat pelaajat ovat valmiita
+  document.getElementById('startButton').addEventListener('click', () => {
+      updatePlayerStatus();
+  });
+
+  // Päivitetään pelin tila Firestoreen
+  async function updateGameStatus(status) {
+      const gameRef = doc(db, 'game', 'status');
+      await setDoc(gameRef, { status: status });
+  }
+
+  // Pallon klikkaaminen
+  canvas.addEventListener('click', (e) => {
+      if (!gameStarted) return;
+
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+
+      balls.forEach((ball, index) => {
+          const distance = Math.sqrt((ball.x - mouseX) ** 2 + (ball.y - mouseY) ** 2);
+          if (distance < ballSize && !ball.clicked) {
+              ball.clicked = true;
+              updateBallStatus(index);
+              gameData[playerId] += 1;  // Päivitetään pelaajan pisteet
+              checkGameEnd();
+              drawBalls();
+          }
+      });
+  });
+
+  // Päivitetään pallon tila Firestoreen
+  async function updateBallStatus(index) {
+      const ballRef = doc(db, 'balls', 'game');
+      await updateDoc(ballRef, { [index]: true });
+
+      // Kuunnellaan pallon tilaa Firestoresta
+      const ballSnapshot = await getDocs(collection(db, 'balls'));
+      ballSnapshot.forEach((doc) => {
+          const ballData = doc.data();
+          balls.forEach((ball, i) => {
+              if (ballData[i]) {
+                  ball.clicked = true;
+              }
+          });
+          drawBalls();
+      });
+  }
+
+  // Tarkistetaan pelin loppu
+  function checkGameEnd() {
+      if (gameData[playerId] >= totalBalls) {
+          statusElement.innerText = `Peli ohi! Pelaaja ${playerId} voitti!`;
+          gameStarted = false;
+          updateGameStatus('ended');
+      }
+  }
+
+  // Päivitetään pelin loppu Firestoreen
+  async function endGame() {
+      const gameRef = doc(db, 'game', 'status');
+      await updateDoc(gameRef, { status: 'ended', winner: playerId });
+  }
+</script>
+
+</body>
+</html>
